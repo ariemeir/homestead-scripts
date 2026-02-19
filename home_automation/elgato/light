@@ -1,0 +1,61 @@
+#!/bin/bash
+
+SCRIPT_DIR="$(cd "$(dirname "$(readlink "$0" 2>/dev/null || echo "$0")")" && pwd)"
+source "$SCRIPT_DIR/elgato.cfg"
+
+if [ -z "$ELGATO_IP" ]; then
+  echo "ELGATO_IP not set"
+  exit 1
+fi
+
+# Get current state
+STATE=$(curl -s http://${ELGATO_IP}:9123/elgato/lights)
+ON=$(echo "$STATE" | grep -o '"on":[0-9]' | head -1 | cut -d: -f2)
+BRIGHTNESS=$(echo "$STATE" | grep -o '"brightness":[0-9]*' | cut -d: -f2)
+TEMP=$(echo "$STATE" | grep -o '"temperature":[0-9]*' | cut -d: -f2)
+
+send_state() {
+  curl -s -X PUT "http://${ELGATO_IP}:9123/elgato/lights" \
+    -H "Content-Type: application/json" \
+    -d "{\"lights\":[{\"on\":$1,\"brightness\":$2,\"temperature\":$3}]}" \
+    > /dev/null
+}
+
+case "$1" in
+  on)
+    send_state 1 ${BRIGHTNESS:-100} ${TEMP:-344}
+    ;;
+  off)
+    send_state 0 ${BRIGHTNESS:-100} ${TEMP:-344}
+    ;;
+  brightness)
+    if [ -z "$2" ]; then
+      echo "Usage: light brightness 0-100"
+      exit 1
+    fi
+    send_state 1 "$2" ${TEMP:-344}
+    ;;
+  temp)
+    if [ -z "$2" ]; then
+      echo "Usage: light temp 143-344"
+      exit 1
+    fi
+    send_state ${ON:-1} ${BRIGHTNESS:-100} "$2"
+    ;;
+  toggle)
+    if [ "$ON" = "1" ]; then
+      send_state 0 ${BRIGHTNESS:-100} ${TEMP:-344}
+    else
+      send_state 1 ${BRIGHTNESS:-100} ${TEMP:-344}
+    fi
+    ;;
+  *)
+    echo "Usage:"
+    echo "  light on"
+    echo "  light off"
+    echo "  light brightness 0-100"
+    echo "  light temp 143-344"
+    echo "  light toggle"
+    ;;
+esac
+
