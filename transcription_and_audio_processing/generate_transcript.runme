@@ -1,0 +1,2 @@
+whisperx $1  --model large-v3 --device cpu --compute_type int8 --diarize --hf_token "$HF_TOKEN" --output_format srt --output_dir .
+
