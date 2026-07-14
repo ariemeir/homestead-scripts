@@ -1,0 +1,36 @@
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Real device/network config (identifies specific hardware + Tailscale IP).
+# Copy config/scanner.example.yaml to config/scanner.yaml and fill it in.
+config/scanner.yaml
+
+logs/*
+!logs/.gitkeep
+
+scans/incoming/*
+scans/processing/*
+scans/completed/*
+scans/failed/*
+
+output/pointclouds/*
+output/meshes/*
+output/textured/*
+output/stl/*
+
+*.jpg
+*.jpeg
+*.heic
+*.png
+*.mov
+*.mp4
+*.ply
+*.obj
+*.mtl
+*.stl
+*.glb
+*.gltf

@@ -1,0 +1,20 @@
+{
+  "remote": "turntable",
+  "library": "IRremote",
+  "buttons": {
+    "POWER": {"protocol": "NEC", "address": 0, "command": 71, "raw": 3091726080, "bits": 32},
+    "ROTATE_CONTINUOUS": {"protocol": "NEC", "address": 0, "command": 12, "raw": 4077715200, "bits": 32},
+    "ROTATE_INTERMITTENT": {"protocol": "NEC", "address": 0, "command": 94, "raw": 2707357440, "bits": 32},
+    "SPEED_UP": {"protocol": "NEC", "address": 0, "command": 21, "raw": 3927310080, "bits": 32},
+    "SPEED_DOWN": {"protocol": "NEC", "address": 0, "command": 24, "raw": 3877175040, "bits": 32},
+    "CW": {"protocol": "NEC", "address": 0, "command": 22, "raw": 3910598400, "bits": 32},
+    "CCW": {"protocol": "NEC", "address": 0, "command": 13, "raw": 4061003520, "bits": 32},
+    "START_PAUSE": {"protocol": "NEC", "address": 0, "command": 25, "raw": 3860463360, "bits": 32},
+    "ANGLE_45": {"protocol": "NEC", "address": 0, "command": 68, "raw": 3141861120, "bits": 32},
+    "ANGLE_90": {"protocol": "NEC", "address": 0, "command": 64, "raw": 3208707840, "bits": 32},
+    "ANGLE_180": {"protocol": "NEC", "address": 0, "command": 67, "raw": 3158572800, "bits": 32},
+    "SET_HOME": {"protocol": "NEC", "address": 0, "command": 7, "raw": 4161273600, "bits": 32},
+    "RETURN_HOME": {"protocol": "NEC", "address": 0, "command": 9, "raw": 4127850240, "bits": 32},
+    "STEP_90": {"protocol": "NEC", "address": 0, "command": 70, "raw": 3108437760, "bits": 32}
+  }
+}

@@ -1,0 +1,60 @@
+name: ScannerCam
+options:
+  bundleIdPrefix: com.ariemeir
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: en
+configs:
+  Debug: debug
+  Release: release
+settings:
+  base:
+    DEVELOPMENT_TEAM: C37565DT8L
+    CODE_SIGN_STYLE: Automatic
+    # Language mode 5 deliberately: the hand-rolled NWListener-based HTTP
+    # server (Server/HTTPServer.swift) and the AVFoundation capture delegate
+    # pattern both predate Swift 6 strict concurrency checking, and doing
+    # that migration properly is out of scope for the MVP scaffold. Toolchain
+    # is still Swift 6.2.3 - this only relaxes actor-isolation/Sendable
+    # enforcement, it doesn't downgrade language features.
+    SWIFT_VERSION: "5"
+    TARGETED_DEVICE_FAMILY: "1"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  ScannerCam:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ScannerCam
+    dependencies:
+      - sdk: AVFoundation.framework
+      - sdk: Network.framework
+      - sdk: CryptoKit.framework
+      - sdk: Security.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ariemeir.ScannerCam
+    info:
+      path: ScannerCam/Info.plist
+      properties:
+        CFBundleDisplayName: ScannerCam
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSCameraUsageDescription: "ScannerCam needs the camera to capture turntable scan photos."
+        NSLocalNetworkUsageDescription: "ScannerCam uses your local network so your Mac can trigger captures and download scan images."
+        NSBonjourServices:
+          - _scannercam._tcp
+schemes:
+  ScannerCam:
+    build:
+      targets:
+        ScannerCam: all
+    run:
+      config: Debug
+    archive:
+      config: Release

@@ -1,0 +1,52 @@
+{
+  "_comment": "Single source of truth for values that must match across the Swift server (capture/iphone/ScannerCam) and the Python controller (capture/controller). See api_v1.md for the full contract.",
+  "api_version": 1,
+  "base_path": "/api/v1",
+  "default_port": 8765,
+  "connection_policy": "close",
+  "project_id": {
+    "pattern": "^[A-Za-z0-9_-]{1,64}$",
+    "min_length": 1,
+    "max_length": 64
+  },
+  "frame": {
+    "min": 0,
+    "max": 999999,
+    "digits": 6
+  },
+  "angle_degrees": {
+    "min": 0.0,
+    "max_exclusive": 360.0
+  },
+  "filename_pattern": "frame_{frame:06d}.jpg",
+  "temp_filename_pattern": ".pending_{uuid}.jpg",
+  "headers": {
+    "auth": "Authorization",
+    "confirm_delete": "X-Confirm-Delete",
+    "version": "X-ScannerCam-Version",
+    "sha256": "X-ScannerCam-SHA256",
+    "project_id": "X-ScannerCam-Project-ID",
+    "frame": "X-ScannerCam-Frame"
+  },
+  "confirm_delete_all_value": "DELETE_ALL_SCANNERCAM_PROJECTS",
+  "request_id_retention": 1000,
+  "min_free_bytes_before_capture": 262144000,
+  "images_list_default_limit": 100,
+  "images_list_max_limit": 500,
+  "error_codes": [
+    "invalid_request",
+    "invalid_project_id",
+    "invalid_frame",
+    "invalid_angle",
+    "unauthorized",
+    "capture_in_progress",
+    "frame_exists",
+    "camera_not_locked",
+    "request_id_conflict",
+    "camera_unavailable",
+    "insufficient_storage",
+    "capture_failed",
+    "file_write_failed",
+    "not_found"
+  ]
+}

@@ -1,0 +1,52 @@
+# Template scanner configuration.
+#
+# Copy this to scanner.yaml (gitignored — it identifies your specific
+# device/network) and fill in your real details. Full API contract lives in
+# docs/scannercam_spec.md and capture/protocols/api_v1.md.
+
+scanner:
+  name: iphone12-turntable-scanner
+
+capture:
+  image_format: jpeg   # ScannerCam MVP only produces JPEG (no HEIC/RAW)
+  degrees_per_photo: 5
+  settle_seconds: 2.0
+  total_rotation_degrees: 360
+  photos_per_rotation: 72
+  output_directory: scans/incoming
+
+api:
+  base_path: /api/v1
+  port: 8765
+  # Bearer token from the ScannerCam Settings screen. Do not hardcode the
+  # value here — set it via this env var instead.
+  token_env_var: SCANNERCAM_TOKEN
+
+iphone:
+  device: iphone12
+  trigger_method: http_api
+  device_codename: your-iphone-codename
+  hardware_model: iPhone13,2
+  device_id: 00000000-0000-0000-0000-000000000000
+  lan_hostname: your-iphone.local
+  tailscale_hostname: your-iphone-tailscale-name
+  tailscale_ip: 100.0.0.0
+  focus_lock: true
+  exposure_lock: true
+  white_balance_lock: true
+
+controller:
+  codename: your-controller-codename
+
+turntable:
+  controller: arduino
+  transport: serial
+  serial_port: /dev/cu.usbmodem-placeholder
+  baud_rate: 115200
+  control_mode: pause_resume_ir
+  estimated_degrees_per_second: null
+
+reconstruction:
+  pipeline: pending
+  working_directory: scans/processing
+  output_directory: output
