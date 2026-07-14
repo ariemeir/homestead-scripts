@@ -14,7 +14,10 @@ enum HTTPServerError: Error {
 final class HTTPServer {
     private var listener: NWListener?
     private let router: Router
-    private let queue = DispatchQueue(label: "com.ariemeir.ScannerCam.server")
+    // The listener queue ONLY accepts connections. Each connection then runs on
+    // its own queue (see `accept`) so a single slow or blocked handler can't
+    // stall the listener or other in-flight requests.
+    private let listenerQueue = DispatchQueue(label: "com.ariemeir.ScannerCam.server.listener")
 
     init(router: Router) {
         self.router = router
@@ -34,7 +37,7 @@ final class HTTPServer {
         listener.stateUpdateHandler = { state in
             ScannerCamLog.server.info("listener state: \(String(describing: state))")
         }
-        listener.start(queue: queue)
+        listener.start(queue: listenerQueue)
         self.listener = listener
     }
 
@@ -44,7 +47,16 @@ final class HTTPServer {
     }
 
     private func accept(_ connection: NWConnection) {
-        connection.start(queue: queue)
+        // Per-connection serial queue: isolates each request. A handler that
+        // blocks (e.g. a capture waiting on the camera, a status snapshot
+        // waiting on the session queue) now only stalls its own connection —
+        // the listener keeps accepting and other requests, including /health,
+        // keep being served. Previously every connection shared one serial
+        // queue, so one stuck handler wedged the entire server.
+        let connectionQueue = DispatchQueue(
+            label: "com.ariemeir.ScannerCam.server.conn.\(UUID().uuidString)"
+        )
+        connection.start(queue: connectionQueue)
         readRequest(from: connection, buffer: Data())
     }
 

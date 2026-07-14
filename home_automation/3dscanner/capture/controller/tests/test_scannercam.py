@@ -30,6 +30,24 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/v1/health":
             return self._json(200, {"status": "ok", "version": "0.1.0"})
+        base, _, query = self.path.partition("?")
+        if base.endswith("/images"):
+            # Two-page cursor pagination in the real API's shape: has_more +
+            # next_after_frame, no offset/total. after_frame=1 yields the tail.
+            params = dict(p.split("=", 1) for p in query.split("&") if "=" in p)
+            if params.get("after_frame") == "1":
+                return self._json(200, {
+                    "project_id": "proj",
+                    "images": [{"frame": 2}],
+                    "has_more": False,
+                    "next_after_frame": 2,
+                })
+            return self._json(200, {
+                "project_id": "proj",
+                "images": [{"frame": 0}, {"frame": 1}],
+                "has_more": True,
+                "next_after_frame": 1,
+            })
         if self.path.endswith("/images/0"):
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")
@@ -112,6 +130,13 @@ def test_download_and_hash(server, tmp_path):
     assert dl["server_sha256"] == JPEG_SHA
     assert dl["size_bytes"] == len(JPEG)
     assert dest.read_bytes() == JPEG
+
+
+def test_list_images_paginates_and_terminates(server):
+    # Real API uses after_frame/has_more (no offset/total). Must walk both
+    # pages and stop — a total/offset assumption would loop forever.
+    images = _client(server).list_images("proj")
+    assert [i["frame"] for i in images] == [0, 1, 2]
 
 
 def test_head_image(server):

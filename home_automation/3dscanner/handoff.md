@@ -266,21 +266,23 @@ Roughly in priority order for a scanning rig to be genuinely usable:
    the UI lock controls existed) but wasn't re-tested after the UI was
    added — worth a quick real check: tap Lock All, then fire a capture with
    `require_locks: true` and confirm it succeeds instead of 409ing.
-6. **ScannerCam's server wedges on project-listing endpoints (real bug, found
-   2026-07-14).** During the first real controller run, `GET
-   /projects/{id}/images`, `/projects/{id}/manifest`, `/projects/{id}` and
-   even `HEAD /images/{frame}` all hung indefinitely (curl timed out), and
-   after that the whole single-threaded server stopped responding to
-   everything including `/health` — it had to be force-quit and reopened.
-   Per-frame image *downloads* (`GET /images/{frame}`) during the scan worked
-   fine; it's the project/listing routes (ProjectStore/ManifestStore access)
-   that block, and because the server has no concurrency (handoff §6.2/§6.3)
-   one stuck request wedges the process. The Python controller was hardened to
-   tolerate this (finalize's remote reconciliation is best-effort; local
-   SHA-256 verification at download time is the real integrity guarantee), so
-   scans still complete and package — but **this Swift-side blocking bug
-   should be root-caused and fixed.** Likely a lock/semaphore or synchronous
-   file I/O on the request thread in the project routes.
+6. **Server wedge — FIXED 2026-07-14.** During the first real controller run
+   the whole server hung (every endpoint, including `/health`, connected but
+   never responded) and had to be force-quit. Root cause was *not* the project
+   routes specifically: `HTTPServer` ran the NWListener, every connection's
+   I/O, *and* `router.handle` all on **one shared serial `DispatchQueue`**, and
+   some handlers block it synchronously (`semaphore.wait()` in the capture
+   route, `sessionQueue.sync` in the status route). One blocked handler stalled
+   the listener too, so nothing — not even `/health` — could be served. Fix:
+   each connection now gets its **own** serial queue (`HTTPServer.accept`), so a
+   blocked request only affects itself; plus the capture `semaphore.wait()` is
+   now bounded (25 s timeout) so a stalled camera can't block forever. Verified
+   on-device: a 3-frame scan + hammering the previously-hung endpoints while
+   pinging `/health` 5×/s → all endpoints 30–50 ms, zero `/health` failures.
+   (A *second*, unrelated bug surfaced during this: the Python client's
+   `list_images` assumed `offset`/`total` pagination but the API uses
+   `after_frame`/`has_more`, so it looped forever re-fetching page 1 — also
+   fixed, with a test.)
 7. **LAN mDNS (`saru.local`) didn't resolve** in testing; only the Tailscale
    address worked. Not root-caused. Bonjour advertisement code exists
    (`ScannerCam-saru`) but whether it's actually the mDNS issue or a Mac-

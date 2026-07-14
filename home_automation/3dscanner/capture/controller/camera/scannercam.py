@@ -213,20 +213,28 @@ class ScannerCamClient:
         }
 
     def list_images(self, project_id: str) -> list[dict]:
-        """All images across pages (spec §7, §20 existence check)."""
+        """All images across pages (spec §7, §20 existence check).
+
+        Uses the API's real cursor pagination: ``after_frame`` query param,
+        ``has_more`` / ``next_after_frame`` in the response (see api_v1.md).
+        The server has no ``offset``/``total`` — assuming those infinite-loops.
+        """
         images: list[dict] = []
-        offset = 0
+        after: int | None = None
         limit = 500
         while True:
-            page = self._get_json(
-                f"/projects/{project_id}/images?limit={limit}&offset={offset}"
-            )
+            path = f"/projects/{project_id}/images?limit={limit}"
+            if after is not None:
+                path += f"&after_frame={after}"
+            page = self._get_json(path)
             batch = page.get("images", [])
             images.extend(batch)
-            total = page.get("total")
-            offset += len(batch)
-            if not batch or (total is not None and offset >= total):
+            if not batch or not page.get("has_more"):
                 break
+            next_after = page.get("next_after_frame")
+            if next_after is None or next_after == after:
+                break  # defensive: no cursor progress -> stop
+            after = next_after
         return images
 
     def get_manifest(self, project_id: str) -> dict:

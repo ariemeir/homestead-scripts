@@ -96,7 +96,13 @@ enum CaptureRoutes {
             captureOutcome = result
             semaphore.signal()
         }
-        semaphore.wait()
+        // Bounded wait: if AVFoundation never delivers the photo (camera stall,
+        // thermal throttle), return an error instead of blocking this
+        // connection's thread forever. Per-connection queues already keep such
+        // a stall from wedging the whole server, but this bounds it further.
+        if semaphore.wait(timeout: .now() + 25) == .timedOut {
+            return .error(code: "capture_failed", message: "Capture timed out.", status: 500)
+        }
 
         let photo: PhotoCaptureProcessor.CapturedPhoto
         switch captureOutcome {
