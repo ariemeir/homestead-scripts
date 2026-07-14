@@ -1,333 +1,347 @@
 #!/usr/bin/env python3
-"""
-Scan orchestration ("shika" side of the ScannerCam protocol).
+"""3D scanner turntable session controller ("shika").
 
-Talks to the ScannerCam iPhone app ("saru") over the API described in
-docs/scannercam_spec.md and capture/protocols/api_v1.md. Requires a bearer
-token from ScannerCam's Settings screen, passed via --token or the
-SCANNERCAM_TOKEN environment variable.
+Runs a complete turntable photogrammetry session against ScannerCam on saru
+and the Arduino IR turntable. See the MVP spec and capture/protocols/api_v1.md.
+
+Usage:
+    ./scan.py run --name red_mug --degrees 10
+    ./scan.py preflight --name red_mug --degrees 5
+    ./scan.py resume scans/incoming/<session_id>
+    ./scan.py package scans/incoming/<session_id>
+    ./scan.py test-camera
+    ./scan.py test-turntable
+    ./scan.py cleanup <project_id>
 """
 
 from __future__ import annotations
 
-import argparse
-import json
 import os
 import sys
-import time
-import urllib.error
-import urllib.request
-import uuid
-from datetime import datetime
 from pathlib import Path
 
+# Re-exec under the project virtualenv (PyYAML/pyserial live there) so the
+# script "just works" when invoked as ./scan.py with a bare system python.
+_VENV_PY = Path(__file__).resolve().parents[2] / ".venv" / "bin" / "python"
+if _VENV_PY.exists() and Path(sys.executable).resolve() != _VENV_PY.resolve():
+    os.execv(str(_VENV_PY), [str(_VENV_PY), str(Path(__file__).resolve()), *sys.argv[1:]])
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SCAN_ROOT = PROJECT_ROOT / "scans" / "incoming"
-DEFAULT_IPHONE_URL = "http://saru.local:8765"
+# Make sibling packages (controller/, camera/, turntable/) importable.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import argparse
+
+from camera.scannercam import ScannerCamClient
+from controller.config import Config
+from controller.errors import EXIT_SUCCESS, ConfigError, ScanError
+from controller.models import CapturePlan, make_session_id
+from controller.session import SessionController
+from controller.state import ControllerLock, SessionLayout, StateStore
+from turntable import build_turntable
 
 
-def capture_photo(
-    iphone_url: str,
-    token: str,
-    project_id: str,
-    frame: int,
-    angle_degrees: float,
-    overwrite: bool = False,
-    require_locks: bool = True,
-    timeout_seconds: float = 30.0,
-) -> dict:
-    endpoint = f"{iphone_url.rstrip('/')}/api/v1/captures"
-
-    payload = {
-        "project_id": project_id,
-        "frame": frame,
-        "angle_degrees": angle_degrees,
-        "overwrite": overwrite,
-        "require_locks": require_locks,
-        "request_id": str(uuid.uuid4()),
-    }
-
-    request = urllib.request.Request(
-        endpoint,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {token}",
-        },
-        method="POST",
+def _build_camera(config: Config, require_token: bool = True) -> ScannerCamClient:
+    return ScannerCamClient(
+        base_url=config.camera.base_url,
+        token=config.token(required=require_token),
+        connect_timeout=config.camera.connect_timeout_seconds,
+        capture_timeout=config.camera.capture_timeout_seconds,
+        download_timeout=config.camera.download_timeout_seconds,
     )
 
+
+def _controller_for(config: Config, layout: SessionLayout, args, session_id, display_name):
+    plan = CapturePlan.from_step(
+        config.capture.degrees_per_frame, config.capture.settle_seconds
+    )
+    interactive = not getattr(args, "yes", False)
+    camera = _build_camera(config)
+    turntable = build_turntable(
+        config, getattr(args, "turntable", None), interactive=interactive
+    )
+    store = StateStore(layout)
+    lock = ControllerLock(config.session.scans_root.parent / ".controller.lock", session_id)
+    return SessionController(
+        config=config,
+        session_id=session_id,
+        display_name=display_name,
+        plan=plan,
+        camera=camera,
+        turntable=turntable,
+        layout=layout,
+        store=store,
+        lock=lock,
+        require_locks=config.camera.require_locks,
+        assume_yes=getattr(args, "yes", False),
+        interactive=interactive,
+    ), turntable, lock
+
+
+def _apply_overrides(config: Config, args) -> None:
+    if getattr(args, "degrees", None) is not None:
+        _validate_step(args.degrees)
+        config.capture.degrees_per_frame = float(args.degrees)
+    if getattr(args, "settle_seconds", None) is not None:
+        config.capture.settle_seconds = float(args.settle_seconds)
+
+
+def _validate_step(degrees: float) -> None:
+    if degrees <= 0 or degrees > 360:
+        raise ConfigError("--degrees must be > 0 and <= 360.")
+    count = round(360.0 / degrees)
+    if abs(count * degrees - 360.0) > 1e-6:
+        raise ConfigError("--degrees must divide evenly into 360 for the MVP.")
+
+
+# --------------------------------------------------------------------------- #
+# Commands
+# --------------------------------------------------------------------------- #
+def cmd_run(config: Config, args) -> int:
+    _apply_overrides(config, args)
+    session_id = make_session_id(args.name)
+    layout = SessionLayout(config.session.scans_root / session_id)
+    if layout.root.exists():
+        raise ConfigError(f"Session directory already exists: {layout.root}")
+    layout.create_skeleton()
+
+    controller, turntable, lock = _controller_for(config, layout, args, session_id, args.name)
+    controller.init_state()
     try:
-        with urllib.request.urlopen(
-            request,
-            timeout=timeout_seconds,
-        ) as response:
-            body = response.read().decode("utf-8")
-            return json.loads(body)
-
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        try:
-            message = json.loads(detail)["error"]["message"]
-        except (json.JSONDecodeError, KeyError, TypeError):
-            message = detail
-        raise RuntimeError(
-            f"ScannerCam rejected capture (HTTP {exc.code}): {message}"
-        ) from exc
-
-    except urllib.error.URLError as exc:
-        raise RuntimeError(
-            f"Could not reach ScannerCam at {endpoint}: {exc}"
-        ) from exc
+        with lock:
+            return controller.run()
+    finally:
+        turntable.close()
 
 
-def check_health(iphone_url: str, timeout_seconds: float = 5.0) -> None:
-    endpoint = f"{iphone_url.rstrip('/')}/api/v1/health"
-    request = urllib.request.Request(endpoint, method="GET")
+def cmd_preflight(config: Config, args) -> int:
+    _apply_overrides(config, args)
+    session_id = make_session_id(args.name)
+    layout = SessionLayout(config.session.scans_root / session_id)
+    layout.create_skeleton()
+    controller, turntable, lock = _controller_for(config, layout, args, session_id, args.name)
+    controller.init_state()
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"Could not reach ScannerCam at {endpoint}: {exc}") from exc
+        with lock:
+            controller.print_header()
+            controller.write_session_manifest()
+            controller.snapshot_config()
+            controller.preflight()
+        print("Preflight passed.")
+        return EXIT_SUCCESS
+    finally:
+        turntable.close()
 
-    if body.get("status") not in ("ok", "degraded"):
-        raise RuntimeError(f"ScannerCam health check returned unexpected body: {body}")
 
-
-def move_turntable_noop(
-    step_number: int,
-    target_angle: float,
-    interactive: bool,
-) -> None:
-    print()
-    print(
-        f"[MOVE placeholder] Rotate object to approximately "
-        f"{target_angle:.1f}°."
+def cmd_resume(config: Config, args) -> int:
+    root = Path(args.session_dir).resolve()
+    if not (root / "session.json").exists():
+        raise ConfigError(f"Not a session directory (no session.json): {root}")
+    layout = SessionLayout(root)
+    store = StateStore(layout)
+    manifest = store.load_session_manifest()
+    session_id = manifest["session_id"]
+    display_name = manifest.get("display_name", session_id)
+    cplan = manifest["capture_plan"]
+    plan = CapturePlan(
+        degrees_per_frame=cplan["degrees_per_frame"],
+        frame_count=cplan["frame_count"],
+        first_angle_degrees=cplan["first_angle_degrees"],
+        last_angle_degrees=cplan["last_angle_degrees"],
+        settle_seconds=cplan["settle_seconds"],
     )
+    config.capture.degrees_per_frame = plan.degrees_per_frame
+    config.capture.settle_seconds = plan.settle_seconds
 
-    if interactive:
-        input("Press Enter when rotation is complete...")
-    else:
-        print(f"[MOVE placeholder] No-op for step {step_number}.")
-
-
-def create_manifest(
-    scan_directory: Path,
-    project_id: str,
-    degrees_per_photo: float,
-    image_count: int,
-) -> Path:
-    scan_directory.mkdir(parents=True, exist_ok=False)
-    (scan_directory / "images").mkdir()
-
-    manifest = {
-        "project_id": project_id,
-        "created_at": datetime.now().astimezone().isoformat(),
-        "degrees_per_photo": degrees_per_photo,
-        "expected_image_count": image_count,
-        "images": [],
-    }
-
-    manifest_path = scan_directory / "manifest.json"
-    manifest_path.write_text(
-        json.dumps(manifest, indent=2) + "\n",
-        encoding="utf-8",
+    interactive = not getattr(args, "yes", False)
+    camera = _build_camera(config)
+    turntable = build_turntable(config, getattr(args, "turntable", None), interactive=interactive)
+    lock = ControllerLock(config.session.scans_root.parent / ".controller.lock", session_id)
+    controller = SessionController(
+        config=config,
+        session_id=session_id,
+        display_name=display_name,
+        plan=plan,
+        camera=camera,
+        turntable=turntable,
+        layout=layout,
+        store=store,
+        lock=lock,
+        require_locks=config.camera.require_locks,
+        assume_yes=getattr(args, "yes", False),
+        interactive=interactive,
     )
+    try:
+        with lock:
+            return controller.resume()
+    finally:
+        turntable.close()
 
-    return manifest_path
 
-
-def update_manifest(
-    manifest_path: Path,
-    frame: int,
-    angle_degrees: float,
-    capture_result: dict,
-) -> None:
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-
-    manifest["images"].append(
-        {
-            "frame": frame,
-            "angle_degrees": angle_degrees,
-            "capture_result": capture_result,
-        }
+def cmd_package(config: Config, args) -> int:
+    root = Path(args.session_dir).resolve()
+    if not (root / "session.json").exists():
+        raise ConfigError(f"Not a session directory (no session.json): {root}")
+    layout = SessionLayout(root)
+    store = StateStore(layout)
+    manifest = store.load_session_manifest()
+    session_id = manifest["session_id"]
+    cplan = manifest["capture_plan"]
+    plan = CapturePlan(
+        degrees_per_frame=cplan["degrees_per_frame"],
+        frame_count=cplan["frame_count"],
+        first_angle_degrees=cplan["first_angle_degrees"],
+        last_angle_degrees=cplan["last_angle_degrees"],
+        settle_seconds=cplan["settle_seconds"],
     )
-
-    manifest_path.write_text(
-        json.dumps(manifest, indent=2) + "\n",
-        encoding="utf-8",
+    camera = _build_camera(config, require_token=False)
+    turntable = build_turntable(config, "noop", interactive=False)
+    lock = ControllerLock(config.session.scans_root.parent / ".controller.lock", session_id)
+    controller = SessionController(
+        config=config,
+        session_id=session_id,
+        display_name=manifest.get("display_name", session_id),
+        plan=plan,
+        camera=camera,
+        turntable=turntable,
+        layout=layout,
+        store=store,
+        lock=lock,
+        require_locks=config.camera.require_locks,
+        assume_yes=True,
+        interactive=False,
     )
+    controller.load_existing()
+    return controller.finalize()
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Capture one iPhone still every N degrees via the ScannerCam API."
+def cmd_test_camera(config: Config, args) -> int:
+    camera = _build_camera(config)
+    print(f"ScannerCam: {camera.base_url}")
+    health = camera.health()
+    print(f"  health:  {health.get('status')} (v{health.get('version')})")
+    status = camera.status()
+    cam = status.get("camera", {})
+    print(f"  camera:  authorized={cam.get('authorized')} "
+          f"session_running={cam.get('session_running')} "
+          f"capture_in_progress={status.get('capture_in_progress')}")
+    for key in ("focus", "exposure", "white_balance"):
+        print(f"    {key}: {(cam.get(key) or {}).get('mode')}")
+    storage = status.get("storage", {})
+    free = storage.get("free_bytes")
+    print(f"  storage: {free // 1_000_000 if free else '?'} MB free, "
+          f"{storage.get('image_count')} images")
+    print("Camera OK.")
+    return EXIT_SUCCESS
+
+
+def cmd_test_turntable(config: Config, args) -> int:
+    turntable = build_turntable(config, getattr(args, "turntable", None), interactive=True)
+    print(f"Turntable driver: {turntable.describe()}")
+    turntable.connect()
+    if not getattr(args, "yes", False):
+        answer = input(
+            "This will send ONE start toggle, wait ~1s, then ONE stop toggle.\n"
+            "Make sure the table is armed (continuous, CW) and clear. Continue? [y/N] "
+        ).strip().lower()
+        if answer not in ("y", "yes"):
+            print("Aborted.")
+            return EXIT_SUCCESS
+    try:
+        print("  start toggle...")
+        turntable.toggle()
+        import time
+
+        time.sleep(1.0)
+        print("  stop toggle...")
+        turntable.toggle()
+        print("Turntable test OK (sent two toggles).")
+        return EXIT_SUCCESS
+    finally:
+        turntable.close()
+
+
+def cmd_cleanup(config: Config, args) -> int:
+    camera = _build_camera(config)
+    project_id = args.project_id
+    if not getattr(args, "yes", False):
+        answer = input(f"Delete remote ScannerCam project {project_id!r}? [y/N] ").strip().lower()
+        if answer not in ("y", "yes"):
+            print("Aborted.")
+            return EXIT_SUCCESS
+    camera.delete_project(project_id)
+    print(f"Deleted remote project {project_id}.")
+    return EXIT_SUCCESS
+
+
+# --------------------------------------------------------------------------- #
+# Argument parsing
+# --------------------------------------------------------------------------- #
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    # --config is shared by every subcommand (parsed after the subcommand name).
+    common_config = argparse.ArgumentParser(add_help=False)
+    common_config.add_argument(
+        "--config", type=Path, default=None, help="Path to scanner.yaml"
     )
+    sub = parser.add_subparsers(dest="command", required=True)
 
-    parser.add_argument(
-        "--name",
-        required=True,
-        dest="project_id",
-        help="Project ID, for example red_mug (ASCII letters/digits/-/_ only).",
-    )
+    def new_sub(name, **kw):
+        return sub.add_parser(name, parents=[common_config], **kw)
 
-    parser.add_argument(
-        "--degrees",
-        type=float,
-        default=10.0,
-        help="Degrees between photos. Default: 10.",
-    )
+    def add_common(p):
+        p.add_argument("--turntable", choices=["arduino_ir", "noop"], default=None)
+        p.add_argument("--yes", action="store_true", help="Skip confirmations (unattended).")
 
-    parser.add_argument(
-        "--iphone-url",
-        default=os.environ.get("SCANNERCAM_URL", DEFAULT_IPHONE_URL),
-        help=f"ScannerCam base URL. Default: {DEFAULT_IPHONE_URL} "
-        "(or $SCANNERCAM_URL). Use the Tailscale address/hostname when off the LAN.",
-    )
+    p_run = new_sub("run", help="Run a full scan session.")
+    p_run.add_argument("--name", required=True)
+    p_run.add_argument("--degrees", type=float, default=None)
+    p_run.add_argument("--settle-seconds", type=float, default=None, dest="settle_seconds")
+    add_common(p_run)
+    p_run.set_defaults(func=cmd_run)
 
-    parser.add_argument(
-        "--token",
-        default=os.environ.get("SCANNERCAM_TOKEN"),
-        help="Bearer token from ScannerCam's Settings screen. "
-        "Defaults to $SCANNERCAM_TOKEN. Required unless --dry-run.",
-    )
+    p_pre = new_sub("preflight", help="Run preflight checks only.")
+    p_pre.add_argument("--name", required=True)
+    p_pre.add_argument("--degrees", type=float, default=None)
+    p_pre.add_argument("--settle-seconds", type=float, default=None, dest="settle_seconds")
+    add_common(p_pre)
+    p_pre.set_defaults(func=cmd_preflight)
 
-    parser.add_argument(
-        "--settle-seconds",
-        type=float,
-        default=2.0,
-        help="Wait after rotation before capture.",
-    )
+    p_res = new_sub("resume", help="Resume an interrupted session.")
+    p_res.add_argument("session_dir")
+    add_common(p_res)
+    p_res.set_defaults(func=cmd_resume)
 
-    parser.add_argument(
-        "--non-interactive",
-        action="store_true",
-        help="Do not pause for manual rotation.",
-    )
+    p_pkg = new_sub("package", help="Validate and package a session.")
+    p_pkg.add_argument("session_dir")
+    p_pkg.set_defaults(func=cmd_package)
 
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Allow re-capturing a frame that already exists on the iPhone.",
-    )
+    p_cam = new_sub("test-camera", help="Probe ScannerCam.")
+    p_cam.set_defaults(func=cmd_test_camera)
 
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Simulate capture without contacting the iPhone.",
-    )
+    p_tt = new_sub("test-turntable", help="Send one start + one stop toggle.")
+    add_common(p_tt)
+    p_tt.set_defaults(func=cmd_test_turntable)
 
-    return parser.parse_args()
+    p_clean = new_sub("cleanup", help="Delete a remote ScannerCam project.")
+    p_clean.add_argument("project_id")
+    p_clean.add_argument("--yes", action="store_true")
+    p_clean.set_defaults(func=cmd_cleanup)
+
+    return parser
 
 
 def main() -> int:
-    args = parse_args()
-
-    if args.degrees <= 0 or args.degrees > 360:
-        print("--degrees must be greater than 0 and at most 360.")
-        return 2
-
-    image_count_float = 360.0 / args.degrees
-    image_count = round(image_count_float)
-
-    if abs(image_count - image_count_float) > 1e-9:
-        print(
-            "For the MVP, --degrees must divide evenly into 360.",
-            file=sys.stderr,
-        )
-        return 2
-
-    if not args.dry_run and not args.token:
-        print(
-            "A bearer token is required (--token or $SCANNERCAM_TOKEN). "
-            "Find it in ScannerCam's Settings screen on saru, or use --dry-run.",
-            file=sys.stderr,
-        )
-        return 2
-
-    if not args.dry_run:
-        try:
-            check_health(args.iphone_url)
-        except RuntimeError as exc:
-            print(str(exc), file=sys.stderr)
-            return 1
-
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    scan_directory = DEFAULT_SCAN_ROOT / f"{timestamp}-{args.project_id}"
-
-    manifest_path = create_manifest(
-        scan_directory=scan_directory,
-        project_id=args.project_id,
-        degrees_per_photo=args.degrees,
-        image_count=image_count,
-    )
-
-    print(f"Project:     {args.project_id}")
-    print(f"Images:      {image_count}")
-    print(f"Step:        {args.degrees:g}°")
-    print(f"Destination: {scan_directory}")
-    print()
-
-    interactive = not args.non_interactive
-
-    # Frames are 0-based, matching docs/scannercam_spec.md §4.2.
-    for frame in range(image_count):
-        angle_degrees = frame * args.degrees
-
-        if frame > 0:
-            move_turntable_noop(
-                step_number=frame,
-                target_angle=angle_degrees,
-                interactive=interactive,
-            )
-
-            print(
-                f"Waiting {args.settle_seconds:.1f}s "
-                "for vibrations to settle..."
-            )
-            time.sleep(args.settle_seconds)
-
-        print(
-            f"Capturing frame {frame:06d} ({frame + 1}/{image_count}) "
-            f"at {angle_degrees:.1f}°..."
-        )
-
-        if args.dry_run:
-            capture_result = {
-                "status": "dry-run",
-                "filename": f"frame_{frame:06d}.jpg",
-            }
-        else:
-            try:
-                capture_result = capture_photo(
-                    iphone_url=args.iphone_url,
-                    token=args.token,
-                    project_id=args.project_id,
-                    frame=frame,
-                    angle_degrees=angle_degrees,
-                    overwrite=args.overwrite,
-                )
-            except RuntimeError as exc:
-                print(str(exc), file=sys.stderr)
-                print(f"Manifest retained at: {manifest_path}")
-                return 1
-
-        update_manifest(
-            manifest_path=manifest_path,
-            frame=frame,
-            angle_degrees=angle_degrees,
-            capture_result=capture_result,
-        )
-
-    print()
-    print("Scan complete.")
-    print(f"Manifest: {manifest_path}")
-    print(
-        f"Next: download images from {args.iphone_url}/api/v1/projects/"
-        f"{args.project_id}/images (see capture/protocols/api_v1.md)."
-    )
-    return 0
+    parser = build_parser()
+    args = parser.parse_args()
+    try:
+        config = Config.load(args.config)
+        return args.func(config, args)
+    except ScanError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return exc.exit_code
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        return 8
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ Two machine codenames are used throughout the code/docs:
 
 ```
 firmware/turntable_ir/     Arduino IR control (real, pre-existing, working)
-capture/controller/        scan.py — turntable scan orchestration (shika side)
+capture/controller/        scan.py + controller/camera/turntable packages — full scan orchestration (shika side); see capture/controller/README.md
 capture/iphone/ScannerCam/ The Xcode project (saru side) — see §4
 capture/protocols/         API contract shared by both sides (api_v1.md, constants.json)
 docs/scannercam_spec.md    Full technical spec, v0.2, with a revision-notes section (§19) documenting what changed from v0.1 and why
@@ -133,16 +133,45 @@ project/image counts. This was built but **only build-verified, not visually
 confirmed** — the user was asked to eyeball it on-device; no screenshot was
 captured (see §4 on why).
 
-`capture/controller/scan.py` was rewritten to match the finalized API
-(previously it targeted an incompatible placeholder protocol: different
-port, different endpoint path, no auth, 1-based frame numbers). It now does
-a health check before scanning, uses bearer auth from `--token` or
-`$SCANNERCAM_TOKEN`, 0-based frames, and surfaces the API's structured JSON
-error messages on failure. It still does turntable movement as an
-interactive placeholder (`move_turntable_noop` — prints an instruction and
-waits for Enter, or no-ops with `--non-interactive`); it does **not** yet
-talk to the Arduino turntable controller (`firmware/turntable_ir/turntable.py`)
-— wiring those two together is an open item (§8).
+**The full session controller is now implemented** (2026-07-14), replacing
+the old flat placeholder `scan.py`. It lives in `capture/controller/` as a
+proper package set — `scan.py` (CLI) plus `controller/` (config, models,
+errors, state, session loop, packaging), `camera/scannercam.py` (stdlib
+`urllib` ScannerCam client), and `turntable/` (interface + `noop` +
+`arduino_ir`). See `capture/controller/README.md` for usage. What it does:
+
+- Full scan loop: capture frame 0 at 0° (no move), then for each subsequent
+  frame — IR start toggle → time-based rotate → stop toggle → settle →
+  capture → download → SHA-256 verify — before the next move (spec §14/§15).
+- **Drives the real turntable** by wrapping `firmware/turntable_ir/turntable.py`
+  (the IR-code source of truth — no codes duplicated in the controller). The
+  toggle is the `START_PAUSE` button; the operator pre-arms the remote to
+  continuous/CW/fixed-speed, and the controller only toggles it.
+- Assumed-state safety machine (spec §4/§19): stopped→running→stopped, and
+  any ambiguous/interrupted toggle drops to `unknown`, which halts the
+  session and demands manual realignment — it never auto-toggles out.
+- Atomic `state.json`/`session.json`/`frames.json`/`checksums.sha256`,
+  `diagnostics/timing.csv`, controller lock, final validation report, a
+  `scans/completed/<id>/` layout with `reconstruction.json`, and a
+  `output/packages/<id>.tar.gz` + `.sha256`.
+- CLI subcommands: `run`, `preflight`, `resume`, `package`, `test-camera`,
+  `test-turntable`, `cleanup`; exit codes per spec §29.
+- **Runs in a project venv** (`.venv`, gitignored) with `requirements.txt`
+  (PyYAML + pyserial + pytest); `scan.py` re-execs itself under `.venv` so
+  `./capture/controller/scan.py …` works without activating it.
+
+**Verified:** 24 pytest tests pass (`./.venv/bin/python -m pytest
+capture/controller/tests`) and a full `scan.py run` was exercised end-to-end
+against a local fake ScannerCam over the real urllib client + no-op turntable,
+producing a valid package. **Not yet run against the physical rig** — no real
+Arduino/serial or a live saru scan has been done through the new controller
+(the old `scan.py` had been curl/manual-tested against saru; this rewrite has
+not). See §7/§8 for what's needed before a real scan.
+
+Two minimal, non-duplicating additions were made to
+`firmware/turntable_ir/turntable.py`: a public `ping()` on the gateway classes
+(so preflight can hard-verify the Arduino PONG). No IR/protocol logic was
+copied out of that file.
 
 ## 6. Key decisions and why
 
@@ -204,12 +233,19 @@ talk to the Arduino turntable controller (`firmware/turntable_ir/turntable.py`)
 
 Roughly in priority order for a scanning rig to be genuinely usable:
 
-1. **`scan.py` doesn't drive the real turntable yet.** It has a
-   `move_turntable_noop` placeholder. `firmware/turntable_ir/turntable.py`
-   (a real, working IR-remote controller talking to an Arduino Uno running
-   `ir_send_gateway.ino`) exists and works standalone, but the two scripts
-   aren't wired together. This is probably the single biggest thing standing
-   between "API works" and "can actually run an unattended scan."
+1. **The new controller has never touched the physical rig.** It's fully
+   implemented and test-verified against fakes, but three things must happen
+   before a real scan:
+   - **Set the real serial port** in `config/scanner.yaml` — it's still
+     `/dev/cu.usbmodem-placeholder`. Run `ls /dev/cu.usbmodem*` with the Uno
+     plugged in.
+   - **Run `test-turntable` and `test-camera`** against the real hardware to
+     confirm the IR toggle and saru connectivity end-to-end.
+   - **Calibrate the turntable speed.** `movement.degrees_per_second: 12.0`
+     is a guess; angles are nominal/time-based and will drift until measured.
+     Photogrammetry tolerates uneven spacing, but a short run should confirm
+     ~N° steps land near N°; add `calibration/turntable/default.yaml`
+     (spec §17) to override run-seconds per step if needed.
 2. **No visual confirmation the new UI actually renders correctly** on
    device — build-verified only (see §5). Worth a real look before relying
    on it.
@@ -230,9 +266,10 @@ Roughly in priority order for a scanning rig to be genuinely usable:
    address worked. Not root-caused. Bonjour advertisement code exists
    (`ScannerCam-saru`) but whether it's actually the mDNS issue or a Mac-
    side resolver quirk wasn't investigated.
-7. **No automated tests.** Everything so far was verified via manual
-   `curl` sequences against the physical device, not a test suite. There's
-   an empty `capture/tests/` directory that's never been used.
+7. **App-side (Swift) has no automated tests.** The ScannerCam iPhone app was
+   verified via manual `curl` sequences against the physical device, not a
+   test suite. (The Python controller now *does* have a pytest suite —
+   `capture/controller/tests/`, 24 tests — but the Swift side does not.)
 8. **Post-MVP items from the spec (§18) are all still open**: ZIP project
    download, HEIC/RAW, live preview streaming, TLS, calibration capture
    mode, sharpness scoring, etc. — none of these are needed for a basic
@@ -241,13 +278,15 @@ Roughly in priority order for a scanning rig to be genuinely usable:
 
 ## 8. Suggested next steps
 
-1. Visually confirm the new CameraScreen UI on-device (§7.2).
-2. Wire `scan.py` to `firmware/turntable_ir/turntable.py` so a scan can
-   actually run unattended: capture → IR pause → wait for settle → rotate →
-   repeat.
-3. Do a real multi-frame scan (aim for the 36/72-frame acceptance criteria
-   in spec §17) end-to-end: `scan.py` orchestrating both the turntable and
-   captures, then pull the whole project down and confirm frame count/
-   ordering/hashes all check out.
-4. Only after that loop works, circle back to UI polish (Projects screen,
-   Settings screen) — it's not blocking the core capture workflow.
+1. **Bring the new controller to the physical rig** (§7.1): set the real
+   serial port, then `./capture/controller/scan.py test-camera` and
+   `test-turntable` to confirm saru + the IR toggle work end-to-end.
+2. **Calibrate turntable speed** and do a first real scan with the no-op or
+   Arduino driver — start with the recommended 10°/36-frame run
+   (`run --name first_real_scan --degrees 10 --settle-seconds 2`), confirm
+   frame count/ordering/hashes and that steps land near 10°, then move to
+   5°/72 frames.
+3. Visually confirm the new CameraScreen UI on-device (§7.2) — still
+   build-verified only.
+4. Circle back to app UI polish (Projects screen, Settings screen) — not
+   blocking the core capture workflow.

@@ -1,52 +1,61 @@
-# Template scanner configuration.
+# Template scanner configuration for the session controller (capture/controller).
 #
 # Copy this to scanner.yaml (gitignored — it identifies your specific
 # device/network) and fill in your real details. Full API contract lives in
-# docs/scannercam_spec.md and capture/protocols/api_v1.md.
+# docs/scannercam_spec.md and capture/protocols/api_v1.md. Paths are relative
+# to the project root (the 3dscanner directory).
 
 scanner:
-  name: iphone12-turntable-scanner
+  schema_version: 1
+  name: iphone12_turntable_scanner
 
-capture:
-  image_format: jpeg   # ScannerCam MVP only produces JPEG (no HEIC/RAW)
-  degrees_per_photo: 5
-  settle_seconds: 2.0
-  total_rotation_degrees: 360
-  photos_per_rotation: 72
-  output_directory: scans/incoming
-
-api:
-  base_path: /api/v1
-  port: 8765
-  # Bearer token from the ScannerCam Settings screen. Do not hardcode the
-  # value here — set it via this env var instead.
-  token_env_var: SCANNERCAM_TOKEN
-
-iphone:
-  device: iphone12
-  trigger_method: http_api
-  device_codename: your-iphone-codename
-  hardware_model: iPhone13,2
-  device_id: 00000000-0000-0000-0000-000000000000
-  lan_hostname: your-iphone.local
-  tailscale_hostname: your-iphone-tailscale-name
-  tailscale_ip: 100.0.0.0
-  focus_lock: true
-  exposure_lock: true
-  white_balance_lock: true
-
-controller:
-  codename: your-controller-codename
+camera:
+  base_url: http://your-iphone:8765/api/v1
+  fallback_url: http://100.0.0.0:8765/api/v1   # Tailscale IP fallback (optional)
+  # Bearer token from the ScannerCam Settings screen. Never hardcode it here —
+  # export it in your shell under the env var named below.
+  token_env: SCANNERCAM_TOKEN
+  connect_timeout_seconds: 5
+  capture_timeout_seconds: 30
+  download_timeout_seconds: 60
+  require_locks: true
 
 turntable:
-  controller: arduino
-  transport: serial
+  driver: arduino_ir            # arduino_ir | noop
   serial_port: /dev/cu.usbmodem-placeholder
   baud_rate: 115200
-  control_mode: pause_resume_ir
-  estimated_degrees_per_second: null
 
-reconstruction:
-  pipeline: pending
-  working_directory: scans/processing
-  output_directory: output
+  # The controller wraps this existing firmware interface (source of truth for
+  # the IR codes and serial protocol). Do not duplicate IR codes elsewhere.
+  interface_directory: firmware/turntable_ir
+  gateway_source: firmware/turntable_ir/ir_send_gateway.ino
+  codes_file: firmware/turntable_ir/turntable_codes.json
+  controller_module: firmware/turntable_ir/turntable.py
+
+  # Nominal timing. Uncalibrated values only estimate the swept angle; recorded
+  # angles are best-effort until you measure and add a calibration profile
+  # (calibration/turntable/default.yaml). Photogrammetry recovers true pose
+  # from image features, so nominal angles are fine for a first scan.
+  movement:
+    degrees_per_second: 12.0
+    toggle_command_latency_seconds: 0.035
+    stop_coast_seconds: 0.080
+    minimum_run_seconds: 0.100
+
+capture:
+  degrees_per_frame: 10          # must divide evenly into 360 for the MVP
+  initial_settle_seconds: 2.0
+  settle_seconds: 2.0
+  max_capture_attempts: 3
+  max_download_attempts: 3
+  retry_delay_seconds: 2.0
+  verify_sha256: true
+  download_immediately: true
+
+session:
+  scans_root: scans/incoming
+  completed_root: scans/completed
+  failed_root: scans/failed
+  packages_root: output/packages
+  package_format: tar.gz
+  delete_remote_after_package: false

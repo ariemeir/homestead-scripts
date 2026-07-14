@@ -39,6 +39,10 @@ class Gateway:
     def send_raw(self, raw: int, repeats: int = 0) -> None:
         raise NotImplementedError
 
+    def ping(self) -> bool:
+        """True if the gateway is reachable. Base/mock transports always are."""
+        return True
+
     def close(self) -> None:
         pass
 
@@ -68,6 +72,9 @@ class SerialGateway(Gateway):
 
     def _ping(self) -> bool:
         return self._cmd("PING") == "PONG"
+
+    def ping(self) -> bool:
+        return self._ping()
 
     def send_raw(self, raw: int, repeats: int = 0) -> None:
         resp = self._cmd(f"R {raw:08X} {repeats}")
