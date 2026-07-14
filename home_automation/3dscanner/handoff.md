@@ -29,7 +29,8 @@ capture/iphone/ScannerCam/ The Xcode project (saru side) — see §4
 capture/protocols/         API contract shared by both sides (api_v1.md, constants.json)
 docs/scannercam_spec.md    Full technical spec, v0.2, with a revision-notes section (§19) documenting what changed from v0.1 and why
 config/                    scanner.example.yaml (template) + scanner.yaml (real, gitignored, personal device/network config — never commit this)
-calibration/, hardware/, reconstruction/, scans/, output/  Mostly empty scaffolding, pre-existing, untouched by this work
+reconstruction/            Photos -> mesh -> STL pipeline (Apple Object Capture); see §9 and reconstruction/README.md
+calibration/, hardware/, scans/, output/  Mostly empty scaffolding, pre-existing, untouched by this work
 ```
 
 ## 3. IMPORTANT: git repo structure correction
@@ -311,3 +312,32 @@ Roughly in priority order for a scanning rig to be genuinely usable:
    build-verified only.
 4. Circle back to app UI polish (Projects screen, Settings screen) — not
    blocking the core capture workflow.
+
+## 9. Reconstruction pipeline (photos -> mesh -> STL), added 2026-07-14
+
+Turns `scans/completed/<id>/images/frame_*.jpg` into a 3D model, entirely on
+this Mac (Apple M4). Full details in `reconstruction/README.md`.
+
+- **COLMAP was evaluated and removed.** Its dense stereo (`patch_match_stereo`)
+  is **CUDA-only** and hard-errors on Apple Silicon ("Dense stereo
+  reconstruction requires CUDA"), so COLMAP could only ever give a sparse point
+  cloud here — no mesh. `brew uninstall colmap` was run. COLMAP + OpenMVS only
+  becomes worthwhile if you offload dense work to an NVIDIA/Linux box later.
+- **Mesh stage = Apple Object Capture** (`RealityKit.PhotogrammetrySession`),
+  GPU-accelerated on M-series, purpose-built for turntable capture, outputs a
+  near-watertight *textured* mesh. Tool: `reconstruction/objcap/` (a ~90-line
+  Swift CLI; `swift build -c release`). Wrapper:
+  `reconstruction/scripts/reconstruct.sh <session_dir> [detail]` ->
+  `output/meshes/<id>.usdz` + `.obj`, then OBJ->STL via `assimp`.
+- **Verified on M4:** `objcap` compiles and runs a full GPU reconstruction pass
+  (the same-pose dry-run frames correctly return `processError` for lack of
+  viewpoint diversity); `assimp` OBJ->STL confirmed. **Not yet run on a real
+  multi-angle scan** — that's the remaining input (needs a real turntable
+  capture of a textured object).
+- **Output is USDZ/OBJ (textured), not STL** — STL is a conversion step and is
+  geometry-only. **Not print-watertight:** a single-ring turntable scan never
+  photographs the object's underside, so the base needs a repair pass (fill
+  hole, keep largest component, make manifold) in Meshlab/Blender before
+  printing.
+- **Next:** capture a real scan (textured object, Lock All, 24-72 frames), run
+  `reconstruct.sh`, inspect the mesh, then work out the base-repair step.
