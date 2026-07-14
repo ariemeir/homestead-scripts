@@ -5,6 +5,10 @@ __pycache__/
 venv/
 .env
 
+# Swift build artifacts (reconstruction/objcap)
+.build/
+.swiftpm/
+
 # Real device/network config (identifies specific hardware + Tailscale IP).
 # Copy config/scanner.example.yaml to config/scanner.yaml and fill it in.
 config/scanner.yaml
