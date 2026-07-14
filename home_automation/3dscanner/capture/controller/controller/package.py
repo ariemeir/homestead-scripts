@@ -75,6 +75,10 @@ def build_validation_report(
     part_files = sorted(p.name for p in layout.images.glob(".frame_*.part"))
     verified_hashes = len(local_frames) - len(invalid_jpegs) - len(hash_mismatches)
 
+    # camera reachability is informational, not a hard gate: each frame was
+    # already SHA-256-verified against the server at download time, so local
+    # integrity implies remote fidelity even if the phone is unreachable now.
+    # A remote count is only enforced when we actually obtained one.
     passed = (
         len(local_frames) == expected
         and not missing
@@ -83,7 +87,6 @@ def build_validation_report(
         and not part_files
         and (remote_frame_count is None or remote_frame_count == expected)
         and assumed_state == AssumedState.STOPPED
-        and camera_reachable
     )
 
     report = {

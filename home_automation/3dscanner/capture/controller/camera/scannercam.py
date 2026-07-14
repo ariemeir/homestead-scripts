@@ -9,7 +9,9 @@ session's retry loop consults (spec §20).
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
+import socket
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -89,6 +91,15 @@ class ScannerCamClient:
             raise CameraError(
                 f"Could not reach ScannerCam ({request.method} "
                 f"{request.full_url}): {exc.reason}",
+                retryable=True,
+            ) from exc
+        except (TimeoutError, socket.timeout, ConnectionError, http.client.HTTPException) as exc:
+            # A bare socket timeout or dropped `Connection: close` socket during
+            # getresponse() is NOT a URLError subclass, so it would otherwise
+            # escape unwrapped. Treat all as transient/retryable.
+            raise CameraError(
+                f"ScannerCam transport error ({request.method} "
+                f"{request.full_url}): {exc!r}",
                 retryable=True,
             ) from exc
 

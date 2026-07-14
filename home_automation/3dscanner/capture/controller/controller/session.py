@@ -515,21 +515,34 @@ class SessionController:
     # ==================================================================== #
     def finalize(self) -> int:
         self.store.update_state(status=Status.FINALIZING)
-        camera_reachable = True
+        camera_reachable = False
         remote_count = None
+        # /status is cheap; record it if we can.
         try:
             end_status = self.camera.status()
             atomic_write_json(
                 self.layout.metadata / "camera_status_end.json", end_status
             )
-            remote_count = len(self.camera.list_images(self.session_id))
-            manifest = self.camera.get_manifest(self.session_id)
-            atomic_write_json(
-                self.layout.metadata / "scannercam_manifest.json", manifest
-            )
+            camera_reachable = True
         except CameraError as exc:
-            camera_reachable = False
             self._record_error("finalize", None, exc)
+        # Remote frame reconciliation is best-effort: every frame was already
+        # SHA-256-verified against the server at download time, so a wedged or
+        # slow ScannerCam must not sink an otherwise-complete scan. Retry a
+        # couple of times, then proceed on the strength of local verification.
+        for attempt in range(1, 3):
+            try:
+                remote_count = len(self.camera.list_images(self.session_id))
+                manifest = self.camera.get_manifest(self.session_id)
+                atomic_write_json(
+                    self.layout.metadata / "scannercam_manifest.json", manifest
+                )
+                camera_reachable = True
+                break
+            except CameraError as exc:
+                self._record_error("finalize", None, exc, attempt=attempt)
+                if attempt < 2:
+                    self._sleep(self.config.capture.retry_delay_seconds)
 
         report = pkg.build_validation_report(
             self.plan,

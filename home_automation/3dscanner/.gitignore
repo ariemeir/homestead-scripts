@@ -21,6 +21,8 @@ output/pointclouds/*
 output/meshes/*
 output/textured/*
 output/stl/*
+output/packages/*.tar.gz
+output/packages/*.tar.gz.sha256
 
 *.jpg
 *.jpeg
