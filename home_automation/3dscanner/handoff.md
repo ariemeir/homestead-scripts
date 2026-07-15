@@ -1,6 +1,6 @@
 # ScannerCam / 3D Scanner — Handoff
 
-Last updated: 2026-07-14
+Last updated: 2026-07-15
 
 This document is written for someone picking up this project cold. It covers
 what exists, what's been decided (and why), what's verified working, and
@@ -239,13 +239,17 @@ copied out of that file.
 Roughly in priority order for a scanning rig to be genuinely usable:
 
 1. **The new controller has never touched the physical rig.** It's fully
-   implemented and test-verified against fakes, but three things must happen
-   before a real scan:
+   implemented and test-verified against fakes, but these must happen before a
+   real scan:
+   - **Wire the IR LED emitter to the Arduino** (`firmware/turntable_ir/`) — the
+     missing physical link that lets the Uno fire the turntable's `START_PAUSE`
+     toggle. (On order, expected 2026-07-15.) Confirm the Uno enumerates:
+     `ls /dev/cu.usbmodem*`.
    - **Set the real serial port** in `config/scanner.yaml` — it's still
-     `/dev/cu.usbmodem-placeholder`. Run `ls /dev/cu.usbmodem*` with the Uno
-     plugged in.
+     `/dev/cu.usbmodem-placeholder`.
    - **Run `test-turntable` and `test-camera`** against the real hardware to
-     confirm the IR toggle and saru connectivity end-to-end.
+     confirm the IR toggle (the LED's real test) and saru connectivity
+     end-to-end.
    - **Calibrate the turntable speed.** `movement.degrees_per_second: 12.0`
      is a guess; angles are nominal/time-based and will drift until measured.
      Photogrammetry tolerates uneven spacing, but a short run should confirm
@@ -328,16 +332,39 @@ this Mac (Apple M4). Full details in `reconstruction/README.md`.
   near-watertight *textured* mesh. Tool: `reconstruction/objcap/` (a ~90-line
   Swift CLI; `swift build -c release`). Wrapper:
   `reconstruction/scripts/reconstruct.sh <session_dir> [detail]` ->
-  `output/meshes/<id>.usdz` + `.obj`, then OBJ->STL via `assimp`.
-- **Verified on M4:** `objcap` compiles and runs a full GPU reconstruction pass
-  (the same-pose dry-run frames correctly return `processError` for lack of
-  viewpoint diversity); `assimp` OBJ->STL confirmed. **Not yet run on a real
-  multi-angle scan** — that's the remaining input (needs a real turntable
-  capture of a textured object).
+  `output/meshes/<id>.usdz` (textured, single file) + `output/meshes/<id>/`
+  (textured OBJ *bundle*: `baked_mesh_*.obj` + `.mtl` + textures), then
+  bundle-OBJ -> STL via `assimp`.
+- **NOW VERIFIED END-TO-END (2026-07-15)** on a real 171-image multi-angle set
+  (RealityCapture's gingerbread sample) — `reconstruct.sh` produced a valid
+  textured USDZ + OBJ bundle + STL, 169/171 frames used. This replaces the old
+  "dry-run only" status; the pipeline is proven on real photogrammetry input.
+  (Still **not run on our own turntable rig's** images — see §7.1.)
+- **Two bugs found & fixed while verifying** (both masked by the earlier
+  same-pose dry-run that failed before reaching output):
+  1. **OBJ output threw `invalidOutput`.** RealityKit requires a *directory*
+     URL for OBJ (it writes a bundle), and — subtly — the URL must carry
+     `isDirectory: true`. Building `URL(fileURLWithPath: "foo.obj")` then
+     `.deletingPathExtension()` yields a *file*-flagged URL that Object Capture
+     rejects. Fixed in `objcap/main.swift` by constructing the dir URL with an
+     explicit `isDirectory: true`.
+  2. **STL step never found the OBJ.** `reconstruct.sh` looked for `<id>.obj`,
+     but the bundle names it `baked_mesh_<hash>.obj` inside `<id>/`. Fixed to
+     glob the bundle. (Also made the image-count line tolerate missing globs so
+     `set -euo pipefail` doesn't abort.)
+  So §9's earlier "assimp OBJ->STL confirmed" is now *actually* true.
 - **Output is USDZ/OBJ (textured), not STL** — STL is a conversion step and is
   geometry-only. **Not print-watertight:** a single-ring turntable scan never
   photographs the object's underside, so the base needs a repair pass (fill
-  hole, keep largest component, make manifold) in Meshlab/Blender before
-  printing.
-- **Next:** capture a real scan (textured object, Lock All, 24-72 frames), run
-  `reconstruct.sh`, inspect the mesh, then work out the base-repair step.
+  hole, keep largest component, make manifold) before printing.
+- **Repair tooling installed (2026-07-15):** MeshLab 2025.07
+  (`/Applications/MeshLab2025.07.app`) and Blender 5.2
+  (`/Applications/Blender.app`), both via Homebrew cask. Recommended repair
+  path: prototype the recipe in MeshLab (Close Holes / Remove Isolated pieces /
+  Repair non-Manifold), then script it with **PyMeshLab** as a
+  `reconstruction/scripts/repair.sh`. For a *flat* printable base (vs. a bumpy
+  hole-fill), Blender's bisect-at-Z-plane-and-cap is better. No `repair.sh`
+  exists yet — build it against real rig geometry, not the gingerbread test.
+- **Next:** capture a real scan on our own rig (textured object, Lock All,
+  36-72 frames), run `reconstruct.sh <session> full`, inspect the mesh, then
+  build the base-repair step.

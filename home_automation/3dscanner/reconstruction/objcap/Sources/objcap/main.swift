@@ -55,8 +55,26 @@ func run() {
         fail("failed to start session (need a folder of images + a supported GPU): \(error)")
     }
 
-    let requests = outputs.map {
-        PhotogrammetrySession.Request.modelFile(url: $0, detail: requestedDetail)
+    // USDZ/USDA are single-file outputs; OBJ is a *bundle* (obj + mtl + texture
+    // maps) and RealityKit requires the request URL to be an existing
+    // DIRECTORY — handing it `foo.obj` fails at submit with `invalidOutput`.
+    // So for a `foo.obj` request, write the bundle into a `foo/` directory.
+    let fm = FileManager.default
+    let requests = outputs.map { url -> PhotogrammetrySession.Request in
+        let target: URL
+        if url.pathExtension.lowercased() == "obj" {
+            // The bundle dir may not exist yet, so build the URL with an explicit
+            // isDirectory:true — otherwise RealityKit sees a file URL with no
+            // extension and rejects it with `invalidOutput`.
+            let dir = url.deletingPathExtension().path
+            try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+            target = URL(fileURLWithPath: dir, isDirectory: true)
+        } else {
+            try? fm.createDirectory(at: url.deletingLastPathComponent(),
+                                    withIntermediateDirectories: true)
+            target = url
+        }
+        return PhotogrammetrySession.Request.modelFile(url: target, detail: requestedDetail)
     }
 
     Task {

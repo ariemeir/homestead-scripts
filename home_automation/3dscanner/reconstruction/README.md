@@ -20,15 +20,19 @@ scans/completed/<id>/images/frame_*.jpg
         │  reconstruction/scripts/reconstruct.sh <session_dir> [detail]
         ▼
 output/meshes/<id>.usdz   textured mesh — Quick Look it (spacebar in Finder)
-output/meshes/<id>.obj    textured mesh — for editing / conversion
+output/meshes/<id>/       textured OBJ *bundle* — baked_mesh_*.obj + .mtl + textures
 output/meshes/<id>.stl    geometry only — for 3D printing (needs repair, below)
 ```
 
 - **Detail levels:** `preview` (fast, rough) · `reduced` · `medium` (default) ·
   `full` · `raw` (slowest, densest). Start with `reduced` to sanity-check, then
   `full` for the keeper.
-- **Output formats:** Object Capture writes **USDZ** and **OBJ** (textured).
-  It does **not** write STL — `reconstruct.sh` converts OBJ→STL via `assimp`.
+- **Output formats:** Object Capture writes **USDZ** (single file) and **OBJ**
+  (a *bundle*: `baked_mesh_*.obj` + `.mtl` + texture PNGs). OBJ output **must be a
+  directory** — RealityKit rejects a plain `foo.obj` file path with
+  `invalidOutput`, so `objcap` writes the bundle into `<id>/`. Object Capture
+  does **not** write STL — `reconstruct.sh` converts the bundle's OBJ→STL via
+  `assimp` (STL is geometry only; textures are dropped).
 - **Watertight?** The Poisson-style surface is topologically closed, but a
   single-ring turntable scan never photographs the object's **underside**, so
   the base is fabricated/incomplete. For printing, run a repair pass: fill the

@@ -25,16 +25,19 @@ if [ ! -x "$BIN" ]; then
   (cd "$ROOT/reconstruction/objcap" && swift build -c release >/dev/null)
 fi
 
-COUNT=$(ls "$IMAGES"/*.jpg 2>/dev/null | wc -l | tr -d ' ')
+COUNT=$(find -L "$IMAGES" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.heic' -o -iname '*.png' \) 2>/dev/null | wc -l | tr -d ' ')
 echo "==> Object Capture: $COUNT images, detail=$DETAIL"
+# OBJ is a bundle, so it goes to a directory ($OUT/$ID/), not a single file.
 "$BIN" "$IMAGES" "$DETAIL" "$OUT/$ID.usdz" "$OUT/$ID.obj"
 
-# OBJ -> STL (geometry only) if a converter is available.
-if command -v assimp >/dev/null 2>&1 && [ -f "$OUT/$ID.obj" ]; then
-  assimp export "$OUT/$ID.obj" "$OUT/$ID.stl" >/dev/null 2>&1 \
+# OBJ -> STL (geometry only) if a converter is available. Object Capture names
+# the bundle's mesh baked_mesh_<hash>.obj inside $OUT/$ID/, so find it.
+OBJ_FILE=$(ls "$OUT/$ID"/*.obj 2>/dev/null | head -1)
+if command -v assimp >/dev/null 2>&1 && [ -n "$OBJ_FILE" ]; then
+  assimp export "$OBJ_FILE" "$OUT/$ID.stl" >/dev/null 2>&1 \
     && echo "STL:  $OUT/$ID.stl (repair base before printing)"
 else
-  echo "note: 'brew install assimp' to also emit STL, or convert $ID.obj in Meshlab."
+  echo "note: 'brew install assimp' to also emit STL, or convert $OUT/$ID/ in Meshlab."
 fi
 
 echo "Done. Outputs in $OUT:"
