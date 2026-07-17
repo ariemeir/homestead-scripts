@@ -1,6 +1,6 @@
 # ScannerCam / 3D Scanner — Handoff
 
-Last updated: 2026-07-15
+Last updated: 2026-07-17
 
 This document is written for someone picking up this project cold. It covers
 what exists, what's been decided (and why), what's verified working, and
@@ -238,23 +238,26 @@ copied out of that file.
 
 Roughly in priority order for a scanning rig to be genuinely usable:
 
-1. **The new controller has never touched the physical rig.** It's fully
-   implemented and test-verified against fakes, but these must happen before a
-   real scan:
+1. **The new controller has never touched the physical rig.** — ✅ **RESOLVED
+   2026-07-17. See §10 for the first full real-rig session.** All four
+   sub-items below are done: IR emitter wired and firing, real serial port set
+   (`/dev/cu.usbmodem112401`), `test-camera`/`test-turntable` both pass against
+   the real hardware, and turntable speed measured (≈13.3 °/s). Kept here for
+   history:
    - **Wire the IR LED emitter to the Arduino** (`firmware/turntable_ir/`) — the
      missing physical link that lets the Uno fire the turntable's `START_PAUSE`
-     toggle. (On order, expected 2026-07-15.) Confirm the Uno enumerates:
-     `ls /dev/cu.usbmodem*`.
-   - **Set the real serial port** in `config/scanner.yaml` — it's still
-     `/dev/cu.usbmodem-placeholder`.
+     toggle. Done — IR reaches the table (confirmed by physical rotation).
+   - **Set the real serial port** in `config/scanner.yaml` — done:
+     `/dev/cu.usbmodem112401`.
    - **Run `test-turntable` and `test-camera`** against the real hardware to
      confirm the IR toggle (the LED's real test) and saru connectivity
-     end-to-end.
-   - **Calibrate the turntable speed.** `movement.degrees_per_second: 12.0`
-     is a guess; angles are nominal/time-based and will drift until measured.
-     Photogrammetry tolerates uneven spacing, but a short run should confirm
-     ~N° steps land near N°; add `calibration/turntable/default.yaml`
-     (spec §17) to override run-seconds per step if needed.
+     end-to-end. Done — both pass.
+   - **Calibrate the turntable speed.** Measured: a full revolution at the
+     **slowest** speed takes ~27 s → `movement.degrees_per_second: 13.3`
+     (was a `12.0` guess), now set in `config/scanner.yaml`. Still nominal
+     (no per-step `calibration/turntable/default.yaml` yet); the seam won't
+     land exactly at 360°, but Object Capture recovers true pose from features
+     so this is fine. Refine with a calibration profile later if needed.
 2. **No visual confirmation the new UI actually renders correctly** on
    device — build-verified only (see §5). Worth a real look before relying
    on it.
@@ -365,6 +368,90 @@ this Mac (Apple M4). Full details in `reconstruction/README.md`.
   `reconstruction/scripts/repair.sh`. For a *flat* printable base (vs. a bumpy
   hole-fill), Blender's bisect-at-Z-plane-and-cap is better. No `repair.sh`
   exists yet — build it against real rig geometry, not the gingerbread test.
-- **Next:** capture a real scan on our own rig (textured object, Lock All,
-  36-72 frames), run `reconstruct.sh <session> full`, inspect the mesh, then
-  build the base-repair step.
+- **NOW VERIFIED ON OUR OWN RIG (2026-07-17)** — see §10. A 72-frame turntable
+  scan of a matte textured object reconstructed cleanly at `full` detail
+  (87,394 triangles). The "gingerbread sample only" caveat above is retired.
+- **`reconstruct.sh` re-run bug — FIXED 2026-07-17.** RealityKit's `modelFile`
+  request refuses to overwrite an existing output and aborts at submit with
+  `invalidOutput`, so re-running a session at a new detail level (e.g. `reduced`
+  then `full`) failed. The script now `rm -rf`s the prior `$ID` outputs
+  (`.usdz`/`.usda`/OBJ bundle dir/`.stl`) before running.
+- **Next:** build the base-repair step (`reconstruction/scripts/repair.sh` via
+  PyMeshLab) against real rig geometry — MeshLab recipe: Remove Isolated pieces
+  → Close Holes → Repair non-Manifold. Optionally add a per-step turntable
+  calibration profile to tighten nominal angles.
+
+## 10. First full real-rig session (2026-07-17)
+
+The entire chain ran end-to-end on the physical rig for the first time:
+**IR arm → 36/72-frame capture → download → SHA-256 verify → package →
+Object Capture → textured USDZ + STL.** ~5 minutes per capture+reconstruct loop.
+
+**Turntable arming — important behavior discovered.** The remote must be
+pre-armed to continuous/CW/slowest before a run (the controller only sends the
+`START_PAUSE` toggle and assumes the table starts **stopped**). Arming is done
+over IR with `firmware/turntable_ir/irctl.py`:
+
+```
+irctl.py send SPEED_DOWN SPEED_DOWN SPEED_DOWN CW ROTATE_CONTINUOUS --gap 1.0 --port /dev/cu.usbmodem112401
+```
+
+**Gotcha:** `ROTATE_CONTINUOUS` **starts the table spinning immediately** — it
+is not a passive mode-select. So the arming sequence leaves the table *running*,
+and you must send one `START_PAUSE` to stop it before `scan.py run`:
+
+```
+irctl.py send START_PAUSE --port /dev/cu.usbmodem112401
+```
+
+If you skip that stop, the controller (assuming STOPPED) inverts every toggle
+and the whole run desyncs. `START_PAUSE` is an unreadable toggle, so confirm
+visually that it actually stopped. After a `scan.py run` completes it leaves the
+table armed+stopped, so back-to-back runs need no re-arming.
+
+**Runs are launched unattended with the token inline** (it's a memorable custom
+token set in ScannerCam Settings, see §4):
+
+```
+SCANNERCAM_TOKEN=<token> ./capture/controller/scan.py run --name <obj> --degrees 5 --yes
+```
+
+`--yes` skips the safety confirmation, so verify readiness first:
+`test-camera` (camera authorized, session running, **focus/exposure/WB all
+locked** — `require_locks: true` will reject the run otherwise) and a
+`test-turntable` spin.
+
+**Subject quality is the whole ballgame** (rig + pipeline were solid from run 1):
+
+| Round | Subject / scene | Frames used | Result |
+|-------|-----------------|-------------|--------|
+| 1 | Glossy mug, cluttered desk + **monitor** behind | — | `processError` |
+| 2 | Glossy mug, light tent + matte backdrop | **10/36** | partial ~90° shell |
+| 3 | **Matte textured ceramic flower**, light tent | **36/36** | clean full mesh |
+| 4 | Same flower, **5° / 72 frames** | **72/72** | clean; `full` = 87k tris |
+
+Lessons: (a) a **feature-rich fixed background** (esp. a monitor showing text)
+breaks the turntable solve — the object rotates but the background doesn't, and
+Object Capture can't reconcile the two. Use a light tent / plain matte backdrop;
+anything on the turntable disc (arrows, ruler) is fine because it rotates *with*
+the object. (b) **Matte + textured + asymmetric** subjects register; **glossy +
+rotationally-symmetric** ones (a ribbed mug) drop frames past ~90° because every
+angle looks alike and specular highlights slide across the surface. (c) At the
+slowest speed, 5° steps are ~0.26 s IR pulses and still captured reliably;
+finer than that risks inconsistent rotation (motor spin-up/coast dominate).
+`--degrees` must divide evenly into 360.
+
+**Detail levels:** `reduced` decimates to a fixed ~25k-triangle target
+regardless of frame count (fast sanity check); `full` on the 72-frame set gave
+87,394 triangles / 19 MB STL / 49 MB textured USDZ. Extra frames pay off as
+accuracy + fewer holes + sharper texture, and become real geometry at `full`.
+
+**Config is local only** (`config/scanner.yaml` is gitignored): real serial port
+`/dev/cu.usbmodem112401` and `degrees_per_second: 13.3` were set there and are
+**not** in git — a fresh checkout must re-copy `scanner.example.yaml` and set
+these. New firmware committed this session: `ir_blaster.ino` (learn+blast in one
+sketch), `ir_smoketest.ino`, and the `irctl.py` CLI.
+
+**Still open:** base-repair step for printing (§9); a per-step turntable
+calibration profile; and a second-elevation pass (tilt) — a single-ring scan
+never sees the object's top/underside, which no amount of extra frames fixes.

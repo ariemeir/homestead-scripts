@@ -20,6 +20,11 @@ OUT="$ROOT/output/meshes"
 BIN="$ROOT/reconstruction/objcap/.build/release/objcap"
 mkdir -p "$OUT"
 
+# RealityKit's modelFile request refuses to overwrite an existing output and
+# fails at submit with `invalidOutput`, so a re-run at a different detail level
+# would abort. Clear any prior outputs for this session id before running.
+rm -rf "$OUT/$ID.usdz" "$OUT/$ID.usda" "$OUT/$ID" "$OUT/$ID.stl"
+
 if [ ! -x "$BIN" ]; then
   echo "building objcap…" >&2
   (cd "$ROOT/reconstruction/objcap" && swift build -c release >/dev/null)
