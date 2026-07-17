@@ -80,7 +80,7 @@ the `.xcodeproj`).
   able in Settings — **never hardcode the live token anywhere in the repo**)
 - **Settings now has a "Set custom token" field** (added 2026-07-14) with a
   "Use today's date (JST)" helper — lets you set a memorable token (e.g.
-  `14072026`) instead of copying the 43-char random one. Takes effect live
+  a `DDMMYYYY` date) instead of copying the 43-char random one. Takes effect live
   (auth reads the token fresh per request). Verified on-device.
 
 **How to build/deploy without opening Xcode UI** (useful since this was all
@@ -455,3 +455,95 @@ sketch), `ir_smoketest.ino`, and the `irctl.py` CLI.
 **Still open:** base-repair step for printing (§9); a per-step turntable
 calibration profile; and a second-elevation pass (tilt) — a single-ring scan
 never sees the object's top/underside, which no amount of extra frames fixes.
+
+## 11. New scanner phone, multi-elevation capture, print-prep pipeline (2026-07-17)
+
+### New scanner phone — iPhone 17 Pro Max
+The old iPhone 12 was replaced. **ScannerCam is dev-signed, so it does NOT
+transfer via iCloud/phone-migration** — it must be rebuilt from source and
+side-loaded. What it took (all via CLI, paid Apple Developer account):
+- New device: **iPhone 17 Pro Max**, hardware UDID `00008150-001034483EF8C01C`,
+  iOS 26.5.2, 48 MP camera (images are 8064×6048 vs the 12's 4032×3024).
+- **Enable Developer Mode** on the phone (Settings ▸ Privacy & Security) — iOS 16+
+  requires it before Xcode can install; it only appears after the phone has been
+  connected to a Mac running Xcode once. Reboot + confirm.
+- Build needed **both** `-allowProvisioningUpdates` **and**
+  `-allowProvisioningDeviceRegistration` for xcodebuild to auto-register the new
+  device (`-allowProvisioningUpdates` alone failed with "device isn't registered").
+  Full: `xcodegen generate && xcodebuild -project ScannerCam.xcodeproj -scheme
+  ScannerCam -destination "id=<UDID>" -configuration Debug -allowProvisioningUpdates
+  -allowProvisioningDeviceRegistration build`, then `devicectl device install app`
+  + `... process launch`. On a paid account it launched with no "untrusted
+  developer" trust step.
+- **Networking:** new phone on Tailscale at **`100.66.118.21`** (hostname
+  `iphone182`). `config/scanner.yaml` `camera.base_url` was repointed to it
+  (gitignored, local only). Old phone `saru`/`100.93.178.102` is retired.
+- Serial port also re-enumerated on replug to **`/dev/cu.usbmodem111401`**
+  (was `...112401`) — macOS reassigns these; update `serial_port` in the config
+  when it changes. Both are local/gitignored.
+- On a fresh app install the token defaults to a random one — set your memorable
+  custom token in ScannerCam Settings (kept out of git; it's a `DDMMYYYY`-style
+  date), and re-**Lock All** each session (locks reset when the app is
+  backgrounded / phone locked).
+
+### Multi-elevation capture (rings) + combining
+A single turntable ring is one camera elevation; it never sees the top/underside
+well. To improve coverage you shoot **additional rings at different camera
+tilts** — each ring is its own full 360° `scan.py run` (the object must NOT move
+between rings; only the camera). Then **reconstruct all rings together**:
+Object Capture ingests every image from every ring in one session and fuses the
+poses. There is no built-in multi-ring mode yet — combine by symlinking both
+sessions' `images/frame_*.jpg` into one dir with distinct prefixes
+(`mid_*`, `und_*`) and running `reconstruct.sh` on that dir.
+- Demonstrated: mid ring (72) + a low/under ring (72). The under ring alone
+  dropped 16 near-edge-on frames (a flat disc is ambiguous edge-on); **combined
+  fused 128/144** and — the real win — corrected the *thickness* (the mid ring
+  over-rounded the edge it never saw; the under ring's edge-on views pinned the
+  true thin profile).
+- A top-down ring adds little for a flat object (redundant with the mid ring);
+  more rings help *3D* objects. Real geometric detail comes from `raw` detail +
+  filling the frame, not more rings.
+
+### Detail-level timing (144 imgs @ 48 MP, on the M4)
+`reduced` 6m20s / 25k tris · `full` 6m52s / 100k tris · `raw` 10m56s / **212k tris**.
+Key insight: **`reduced` is barely faster than `full`** (32 s) — ~90% of runtime
+is ingesting+solving the images, identical across levels; only the final
+mesh/texture stage differs. So `reduced`'s value is a *lighter file*, not speed.
+`raw` is the only level that adds real geometry (2.1× `full`). USDZ file size is
+texture-dominated and does **not** track triangle count.
+
+### Print-prep pipeline — `reconstruction/scripts/repair.py` (NEW, committed)
+PyMeshLab tool (added to `requirements.txt`) that turns a reconstructed mesh into
+a printable solid: weld → drop stray components → repair non-manifold → close
+holes (**watertight**); `--normal-to-z` (orient the flat-part normal to +Z via
+PCA); `--diameter-mm N` (STL is unitless, slicers read mm, so scale widest
+in-plane extent to N mm → N mm print); `--smooth-base MM` (Taubin-smooth just the
+bottom band to soften the fabricated base, petals untouched); then seat on Z=0
+centered. Example used this session:
+`repair.py in.stl out.stl --normal-to-z --diameter-mm 100 --smooth-base 3.5`
+→ watertight, Z⟂flat, 100 mm flower, 17.4 mm thick.
+
+**Object Capture already makes near-watertight meshes** — the `full`/`raw` flower
+had only *one* tiny 20-edge hole; the "fabricated base" is closed topologically,
+just geometrically crude (never photographed), hence `--smooth-base`.
+
+### ⚠️ Drilling see-through holes vs. watertight (the gotcha)
+Editing (crop by Z-range, delete stray verts, punch holes) is done in **Blender**
+(interactive selection + Boolean modifier; MeshLab can't do booleans). Ordering
+trap: **`close-holes`/`repair.py` fills EVERY open boundary, including drilled
+holes that are still open**, so:
+- **Drill on a clean watertight solid.** Boolean Difference through a closed solid
+  yields clean tunnels that don't break watertightness; drilling a *messy* mesh
+  leaves open boundaries (Blender's/headless EXACT boolean can even collapse it).
+  This session: dropped the messy in-Blender drill, ran `repair.py` to get a clean
+  solid, then re-drilled that.
+- Blender 5.x Boolean **solvers renamed**: `Float` (old "Fast"), `Exact`,
+  **`Manifold`** (new, ideal for watertight meshes — use it here). "Whole mesh
+  vanishes on Difference" = flipped cutter/target normals (Shift+N, Inside off),
+  Operation=Intersect, unapplied cutter scale (Ctrl+A ▸ Scale), or a
+  self-intersecting joined cutter (tick Self Intersection).
+
+**Downstream (not in repo):** the printed master is for a **one-part open-pour
+silicone block mold** (flat-backed medallion → simplest case), cast in casting
+gypsum (Hydrocal/dental stone > craft Plaster of Paris). Through-holes make thin
+fragile mold posts — plug them for a simple first mold.
