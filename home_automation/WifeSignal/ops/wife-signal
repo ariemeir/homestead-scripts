@@ -1,0 +1,143 @@
+#!/bin/zsh
+set -euo pipefail
+TAILSCALE="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+
+LABEL="com.ariemeir.wife-signal"
+DOMAIN="gui/$(id -u)"
+PLIST="$HOME/Library/LaunchAgents/${LABEL}.plist"
+LOCAL_HEALTH="http://127.0.0.1:8787/health"
+PUBLIC_HEALTH="https://shika.tailb7b217.ts.net/health"
+
+wait_for_server() {
+  for _ in {1..20}; do
+    if curl -fsS --max-time 2 "$LOCAL_HEALTH" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
+server_is_loaded() {
+  launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1
+}
+
+start_server() {
+  if server_is_loaded; then
+    launchctl kickstart -k "$DOMAIN/$LABEL"
+  else
+    launchctl bootstrap "$DOMAIN" "$PLIST"
+  fi
+
+  if wait_for_server; then
+    echo "✓ Wife Signal server is running on 127.0.0.1:8787"
+  else
+    echo "✗ Server did not become healthy." >&2
+    echo "  Check: tail -50 ~/.wife-signal/logs/server-error.log" >&2
+    exit 1
+  fi
+}
+
+start_serve() {
+  # Idempotently configure a persistent background tailnet-only HTTPS proxy.
+  # serve (not funnel): reachable only from devices on the tailnet.
+  "$TAILSCALE" serve --bg --yes 8787 >/dev/null
+
+  if curl -fsS --max-time 10 "$PUBLIC_HEALTH" >/dev/null 2>&1; then
+    echo "✓ Serve is reachable at https://shika.tailb7b217.ts.net (tailnet only)"
+  else
+    echo "⚠ Serve was configured, but the tailnet health check failed." >&2
+    "$TAILSCALE" serve status
+    exit 1
+  fi
+}
+
+stop_serve() {
+  # This clears all serve configuration on shika.
+  # Fine while Wife Signal is the only service hosted here.
+  "$TAILSCALE" serve reset >/dev/null 2>&1 || true
+  echo "✓ Serve stopped"
+}
+
+stop_server() {
+  if server_is_loaded; then
+    launchctl bootout "$DOMAIN/$LABEL"
+    echo "✓ Wife Signal server stopped gracefully"
+  else
+    echo "• Wife Signal server was already stopped"
+  fi
+}
+
+show_status() {
+  echo "Server:"
+  if curl -fsS --max-time 2 "$LOCAL_HEALTH"; then
+    echo
+  else
+    echo "  not reachable"
+  fi
+
+  echo
+  echo "LaunchAgent:"
+  if server_is_loaded; then
+    launchctl print "$DOMAIN/$LABEL" |
+      grep -E 'state =|pid =|last exit code =' |
+      sed 's/^/  /'
+  else
+    echo "  not loaded"
+  fi
+
+  echo
+  echo "Serve:"
+  "$TAILSCALE" serve status 2>&1 | sed 's/^/  /'
+}
+
+show_logs() {
+  tail -n 100 \
+    "$HOME/.wife-signal/logs/server.log" \
+    "$HOME/.wife-signal/logs/server-error.log"
+}
+
+ack_signal() {
+  SERVER_DIR="$HOME/dev/scripts/home_automation/WifeSignal/server"
+
+  set -a
+  source "$SERVER_DIR/.env"
+  set +a
+
+  curl -fsS \
+    -X POST \
+    -H "Authorization: Bearer $SIGNAL_API_TOKEN" \
+    http://127.0.0.1:8787/v1/ack
+
+  echo
+}
+
+case "${1:-}" in
+  up|start)
+    start_server
+    start_serve
+    ;;
+  down|stop)
+    stop_serve
+    stop_server
+    ;;
+  restart)
+    stop_serve
+    stop_server
+    start_server
+    start_serve
+    ;;
+  status)
+    show_status
+    ;;
+  ack|acknowledge)
+    ack_signal
+    ;;
+  logs)
+    show_logs
+    ;;
+  *)
+    echo "Usage: wife-signal {up|down|restart|status|logs|ack}"
+    exit 2
+    ;;
+esac

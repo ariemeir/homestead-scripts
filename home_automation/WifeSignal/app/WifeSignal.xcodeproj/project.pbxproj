@@ -1,0 +1,341 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0B088388C8732D6C4A5F0E4F /* SignalViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46A4AA4D8541CF76A17930F6 /* SignalViewModel.swift */; };
+		17DFC63920E63F554ECD5AE0 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56EA5EB07E72CD6058D5B027 /* Models.swift */; };
+		234A3EEC83AB3E419DC8DDA2 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D7751909A40E96203C15D30 /* ContentView.swift */; };
+		62AAF8BC4917D8009BFAF6E1 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38208055E6D43130FF9ECF70 /* AppSettings.swift */; };
+		7805CBF9283FD29CC1E12F08 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0C89106D32ABA5A3ACE369B9 /* Assets.xcassets */; };
+		7951BC5EF4FE40A06614CD9B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9857E6B8E839388B0D9B0122 /* SettingsView.swift */; };
+		F745EA5C960C4E4D92FF8F53 /* SignalAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F6A001A38BA1208DEE946F /* SignalAPI.swift */; };
+		F7F9A1FA0670DB4DC961F636 /* WifeSignalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431367BF6085CB7C3E040A9B /* WifeSignalApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0C89106D32ABA5A3ACE369B9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		38208055E6D43130FF9ECF70 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		431367BF6085CB7C3E040A9B /* WifeSignalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WifeSignalApp.swift; sourceTree = "<group>"; };
+		46A4AA4D8541CF76A17930F6 /* SignalViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalViewModel.swift; sourceTree = "<group>"; };
+		4D7751909A40E96203C15D30 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		56EA5EB07E72CD6058D5B027 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		58C60E87B8345C41ED29E9ED /* WifeSignal.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = WifeSignal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		86F6A001A38BA1208DEE946F /* SignalAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalAPI.swift; sourceTree = "<group>"; };
+		9857E6B8E839388B0D9B0122 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		049E9530CB64D9B6548B5C96 = {
+			isa = PBXGroup;
+			children = (
+				AAD1FAF432852E8CB664C595 /* WifeSignal */,
+				9D84CC2512F770B0941AEBF1 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		9D84CC2512F770B0941AEBF1 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				58C60E87B8345C41ED29E9ED /* WifeSignal.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AAD1FAF432852E8CB664C595 /* WifeSignal */ = {
+			isa = PBXGroup;
+			children = (
+				38208055E6D43130FF9ECF70 /* AppSettings.swift */,
+				0C89106D32ABA5A3ACE369B9 /* Assets.xcassets */,
+				4D7751909A40E96203C15D30 /* ContentView.swift */,
+				56EA5EB07E72CD6058D5B027 /* Models.swift */,
+				9857E6B8E839388B0D9B0122 /* SettingsView.swift */,
+				86F6A001A38BA1208DEE946F /* SignalAPI.swift */,
+				46A4AA4D8541CF76A17930F6 /* SignalViewModel.swift */,
+				431367BF6085CB7C3E040A9B /* WifeSignalApp.swift */,
+			);
+			path = WifeSignal;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		75A71707E13E006D6F65F82F /* WifeSignal */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DD858D39AA179F200FA1773C /* Build configuration list for PBXNativeTarget "WifeSignal" */;
+			buildPhases = (
+				FF748898D28DB9F6AA95DC7A /* Sources */,
+				1E001C72E9F1F18B2A6EEA48 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WifeSignal;
+			packageProductDependencies = (
+			);
+			productName = WifeSignal;
+			productReference = 58C60E87B8345C41ED29E9ED /* WifeSignal.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		9C4BA043D712B7B9E6ADB0A4 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					75A71707E13E006D6F65F82F = {
+						DevelopmentTeam = C37565DT8L;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = BFC5294FB86AB0F706201302 /* Build configuration list for PBXProject "WifeSignal" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 049E9530CB64D9B6548B5C96;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 9D84CC2512F770B0941AEBF1 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				75A71707E13E006D6F65F82F /* WifeSignal */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1E001C72E9F1F18B2A6EEA48 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7805CBF9283FD29CC1E12F08 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		FF748898D28DB9F6AA95DC7A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				62AAF8BC4917D8009BFAF6E1 /* AppSettings.swift in Sources */,
+				234A3EEC83AB3E419DC8DDA2 /* ContentView.swift in Sources */,
+				17DFC63920E63F554ECD5AE0 /* Models.swift in Sources */,
+				7951BC5EF4FE40A06614CD9B /* SettingsView.swift in Sources */,
+				F745EA5C960C4E4D92FF8F53 /* SignalAPI.swift in Sources */,
+				0B088388C8732D6C4A5F0E4F /* SignalViewModel.swift in Sources */,
+				F7F9A1FA0670DB4DC961F636 /* WifeSignalApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		4D72B368704ED5A527AE8CA2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		5437ABD83FF26BF71C46DADB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		99816E18E4BF6FD4D2856D6A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = C37565DT8L;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Wife Signal";
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ariemeir.wifesignal;
+				PRODUCT_NAME = WifeSignal;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		EB67DA2EA82D2AAD859AB41C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = C37565DT8L;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Wife Signal";
+				INFOPLIST_KEY_CFBundleIconName = AppIcon;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ariemeir.wifesignal;
+				PRODUCT_NAME = WifeSignal;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		BFC5294FB86AB0F706201302 /* Build configuration list for PBXProject "WifeSignal" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5437ABD83FF26BF71C46DADB /* Debug */,
+				4D72B368704ED5A527AE8CA2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		DD858D39AA179F200FA1773C /* Build configuration list for PBXNativeTarget "WifeSignal" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EB67DA2EA82D2AAD859AB41C /* Debug */,
+				99816E18E4BF6FD4D2856D6A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 9C4BA043D712B7B9E6ADB0A4 /* Project object */;
+}
